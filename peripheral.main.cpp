@@ -4,9 +4,9 @@
 
 Adafruit_LSM6DSOX imu;
 
-// ======================================================
+
 // BLE SETUP
-// ======================================================
+
 
 // Custom alert service
 BLEService alertService(BLEUUID("19B10000-E8F2-537E-4F6C-D104768A1214"));
@@ -29,9 +29,9 @@ bool advertisingOn = true;
 uint32_t lastShakeTime = 0;
 uint32_t lastHeartbeat = 0;
 
-// ======================================================
+
 // SHAKE / ORIENTATION SETTINGS
-// ======================================================
+
 
 const float SHAKE_THRESHOLD = 18.0;      // tune if needed
 const uint32_t SHAKE_COOLDOWN = 1000;    // ms between valid shake events
@@ -40,9 +40,9 @@ const uint32_t SHAKE_COOLDOWN = 1000;    // ms between valid shake events
 const float MAIN_AXIS_MIN = 7.0;         // dominant axis must exceed this
 const float OTHER_AXIS_MAX = 3.0;        // other axes should stay under this
 
-// ======================================================
+
 // IMU SETUP
-// ======================================================
+
 
 void setupIMU() {
   if (!imu.begin_I2C(0x6B)) {
@@ -58,9 +58,9 @@ void setupIMU() {
   imu.setAccelDataRate(LSM6DS_RATE_104_HZ);
 }
 
-// ======================================================
+
 // HELPERS
-// ======================================================
+
 
 void blinkLED(int times, int onTime, int offTime) {
   for (int i = 0; i < times; i++) {
@@ -121,9 +121,9 @@ void sendShakeAlert(const String &orientation, uint32_t timestampMs) {
   Serial.println(payload);
 }
 
-// ======================================================
+
 // SETUP
-// ======================================================
+
 
 void setup() {
   Serial.begin(115200);
@@ -149,9 +149,9 @@ void setup() {
   Serial.println("Peripheral Ready and Advertising");
 }
 
-// ======================================================
+
 // LOOP
-// ======================================================
+
 
 void loop() {
   // Optional: BOOTSEL toggles advertising on/off for testing
