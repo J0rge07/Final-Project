@@ -11,6 +11,7 @@ RTC_DS1307 rtc;
 const char *myserviceuuid = "3687d5e6-22a7-4b4d-a1e6-60d516e63649";
 const char *strDatauuid   = "34e0e5b7-1a4a-4ea6-b0c8-df0f50e8a0ce";
 
+// ===== BLE =====
 BLEService service{BLEUUID(myserviceuuid)};
 BLECharacteristic strData(BLEUUID(strDatauuid), BLEWrite | BLERead | BLENotify, "Message");
 
@@ -69,11 +70,12 @@ void setup() {
     if (msg.startsWith("SHAKE")) {
       Serial.println("SHAKE received on Peripheral");
 
+      // LED blink (SHORT)
       digitalWrite(LED_BUILTIN, HIGH);
       delay(150);
       digitalWrite(LED_BUILTIN, LOW);
 
-      // Speaker + Neopixel go here later
+      // TODO: Add Neopixel + Speaker here
     }
   });
 
@@ -101,6 +103,20 @@ void loop() {
 
     strData.setValue(message);
     strData.notify();
+  }
+
+  delay(50);
+}
+  // ===== SEND SHAKE =====
+  if (imuTriggered) {
+    imuTriggered = false;
+
+    String timestamp = String(millis() / 1000);
+    String message = "SHAKE|" + timestamp;
+
+    Serial.print("Sending: "); Serial.println(message);
+
+    strData.setValue(message);
   }
 
   delay(50);
