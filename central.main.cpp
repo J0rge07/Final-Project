@@ -77,7 +77,7 @@ String orientationToSpeech(String orientation) {
   if (orientation == "RIGHT") return "right";
   if (orientation == "FRONT") return "front";
   if (orientation == "BACK") return "back";
-  return "unknown orientation";
+  return " Security Alert!";
 }
 
 void speakShakeAlert(const String &orientation, const String &timestamp) {
@@ -86,7 +86,7 @@ void speakShakeAlert(const String &orientation, const String &timestamp) {
   }
   lastSpeechTime = millis();
 
-  String phrase = "Shake detected. Orientation " + orientationToSpeech(orientation);
+  String phrase = "Shake detected.  " + orientationToSpeech(orientation);
   BMP.speak(phrase.c_str());
 
   Serial.print("Spoken alert at timestamp ms: ");
