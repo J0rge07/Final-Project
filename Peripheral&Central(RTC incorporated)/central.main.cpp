@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <BLE.h>
+#include <Adafruit_NeoPixel.h>
 
 #include <BackgroundAudioSpeech.h>
 #include <libespeak-ng/voice/en_029.h>
@@ -13,6 +14,13 @@
 #include <libespeak-ng/voice/en_us_nyc.h>
 #include <I2S.h>
 #include <BackgroundAudio.h>
+
+// ======================================================
+// NEOPIXEL
+// ======================================================
+#define PIXEL_PIN 28
+#define NUM_PIXELS 1
+Adafruit_NeoPixel pixel(NUM_PIXELS, PIXEL_PIN, NEO_GRB + NEO_KHZ800);
 
 // ======================================================
 // BLE UUIDS
@@ -57,17 +65,23 @@ uint32_t lastSpeechTime = 0;
 const uint32_t SPEECH_COOLDOWN = 1200;
 
 // ======================================================
-// HELPERS
+// NEOPIXEL ALERT
 // ======================================================
-void blinkLED(int times, int onTime, int offTime) {
+void alertFlash(int times, int delayTime) {
   for (int i = 0; i < times; i++) {
-    digitalWrite(LED_BUILTIN, HIGH);
-    delay(onTime);
-    digitalWrite(LED_BUILTIN, LOW);
-    delay(offTime);
+    pixel.setPixelColor(0, pixel.Color(255, 0, 0)); // RED
+    pixel.show();
+    delay(delayTime);
+
+    pixel.clear();
+    pixel.show();
+    delay(delayTime);
   }
 }
 
+// ======================================================
+// HELPERS
+// ======================================================
 String orientationToSpeech(String orientation) {
   if (orientation == "FACE_UP") return "face up";
   if (orientation == "FACE_DOWN") return "face down";
@@ -79,9 +93,7 @@ String orientationToSpeech(String orientation) {
 }
 
 void speakShakeAlert(const String &orientation, const String &rtcTime) {
-  if (millis() - lastSpeechTime < SPEECH_COOLDOWN) {
-    return;
-  }
+  if (millis() - lastSpeechTime < SPEECH_COOLDOWN) return;
   lastSpeechTime = millis();
 
   String phrase = "Shake detected. Orientation " + orientationToSpeech(orientation);
@@ -94,9 +106,6 @@ void speakShakeAlert(const String &orientation, const String &rtcTime) {
 void parseAndHandleMessage(const String &msg) {
   Serial.print("Received: ");
   Serial.println(msg);
-
-  // Expected format:
-  // SHAKE,ORIENTATION,MM-DD-YYYY HH:MM:SS
 
   int firstComma = msg.indexOf(',');
   int secondComma = msg.indexOf(',', firstComma + 1);
@@ -112,21 +121,15 @@ void parseAndHandleMessage(const String &msg) {
 
   if (eventType == "SHAKE") {
     Serial.println("SHAKE received on Central");
-    Serial.print("Orientation: ");
-    Serial.println(orientation);
-    Serial.print("RTC time: ");
-    Serial.println(rtcTime);
 
-    blinkLED(2, 120, 120);
-    speakShakeAlert(orientation, rtcTime);
+    alertFlash(3, 120);          // NeoPixel instead of LED
+    speakShakeAlert(orientation, rtcTime); // Audio
   }
 }
 
 void onAlertNotify(BLERemoteCharacteristic *c, const uint8_t *data, uint32_t len) {
   String msg = "";
-  for (uint32_t i = 0; i < len; i++) {
-    msg += (char)data[i];
-  }
+  for (uint32_t i = 0; i < len; i++) msg += (char)data[i];
   parseAndHandleMessage(msg);
 }
 
@@ -134,43 +137,23 @@ bool connectToPeripheral() {
   Serial.println("Scanning for peripheral...");
 
   auto report = BLE.scan(BLEUUID(ALERT_SERVICE_UUID), 5);
-
-  if (!report || report->empty()) {
-    Serial.println("No peripheral found");
-    return false;
-  }
+  if (!report || report->empty()) return false;
 
   connectedDevice = report->front();
 
-  Serial.println("Peripheral found, connecting...");
-
-  if (!BLE.client()->connect(connectedDevice, 10)) {
-    Serial.println("Connection failed");
-    return false;
-  }
-
-  Serial.println("Connected to peripheral");
+  if (!BLE.client()->connect(connectedDevice, 10)) return false;
 
   alertService = BLE.client()->service(BLEUUID(ALERT_SERVICE_UUID));
-  if (!alertService) {
-    Serial.println("Alert service not found");
-    BLE.client()->disconnect();
-    return false;
-  }
+  if (!alertService) return false;
 
   alertEvent = alertService->characteristic(BLEUUID(ALERT_EVENT_UUID));
-  if (!alertEvent) {
-    Serial.println("Alert characteristic not found");
-    BLE.client()->disconnect();
-    return false;
-  }
+  if (!alertEvent) return false;
 
   statusChar = alertService->characteristic(BLEUUID(STATUS_UUID));
 
   alertEvent->onNotify(onAlertNotify);
   alertEvent->enableNotifications();
 
-  Serial.println("Notifications enabled");
   isConnected = true;
   return true;
 }
@@ -179,39 +162,26 @@ void setup() {
   Serial.begin(115200);
   delay(3000);
 
-  pinMode(LED_BUILTIN, OUTPUT);
-  digitalWrite(LED_BUILTIN, LOW);
+  // NeoPixel init
+  pixel.begin();
+  pixel.clear();
+  pixel.show();
 
   BMP.setVoice(v[1]);
-  if (!BMP.begin()) {
-    Serial.println("Failed to start BMP");
-  } else {
-    BMP.speak("Central board ready");
-  }
+  BMP.begin();
 
   BLE.begin();
-  Serial.println("BLE Central ready");
 }
 
 void loop() {
   if (!isConnected || !BLE.client()->connected()) {
     isConnected = false;
-
-    if (BLE.client()->connected()) {
-      BLE.client()->disconnect();
-    }
+    BLE.client()->disconnect();
 
     if (!connectToPeripheral()) {
       delay(2000);
       return;
     }
-  }
-
-  if (statusChar && millis() - lastStatusRead > 5000) {
-    lastStatusRead = millis();
-    String status = statusChar->getString();
-    Serial.print("Peripheral status: ");
-    Serial.println(status);
   }
 
   delay(100);
