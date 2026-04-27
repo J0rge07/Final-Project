@@ -18,7 +18,7 @@
 // ======================================================
 // NEOPIXEL
 // ======================================================
-#define PIXEL_PIN 28
+#define PIXEL_PIN 27
 #define NUM_PIXELS 1
 Adafruit_NeoPixel pixel(NUM_PIXELS, PIXEL_PIN, NEO_GRB + NEO_KHZ800);
 
