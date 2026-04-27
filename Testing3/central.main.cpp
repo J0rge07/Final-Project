@@ -13,12 +13,13 @@
 #include <libespeak-ng/voice/en_us.h>
 #include <libespeak-ng/voice/en_us_nyc.h>
 #include <I2S.h>
+#include <Adafruit_NeoPixel.h>
 #include <BackgroundAudio.h>
 
 // ======================================================
 // NEOPIXEL
 // ======================================================
-#define PIXEL_PIN 27
+#define PIXEL_PIN 28
 #define NUM_PIXELS 1
 Adafruit_NeoPixel pixel(NUM_PIXELS, PIXEL_PIN, NEO_GRB + NEO_KHZ800);
 
