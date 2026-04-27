@@ -212,6 +212,9 @@ void loop() {
       delay(2000);
       return;
     }
+
+    alertFlash();
+    
   }
 
   delay(100);
