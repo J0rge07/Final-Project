@@ -66,15 +66,15 @@ const uint32_t SPEECH_COOLDOWN = 1200;
 // ======================================================
 // NEOPIXEL ALERT
 // ======================================================
-void alertFlash(int times, int delayTime) {
-  for (int i = 0; i < times; i++) {
-    pixel.setPixelColor(0, pixel.Color(255, 0, 0)); // RED on receiver
+void alertFlash() {
+  for (int i = 0; i < 2; i++) {
+    pixel.setPixelColor(0, pixel.Color(0, 0, 255)); // BLUE on sender
     pixel.show();
-    delay(delayTime);
+    delay(120);
 
     pixel.clear();
     pixel.show();
-    delay(delayTime);
+    delay(120);
   }
 }
 
