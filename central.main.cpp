@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <BLE.h>
+#include <Adafruit_NeoPixel.h>
 
 #include <BackgroundAudioSpeech.h>
 #include <libespeak-ng/voice/en_029.h>
@@ -14,16 +15,23 @@
 #include <I2S.h>
 #include <BackgroundAudio.h>
 
+// ======================================================
+// NEOPIXEL
+// ======================================================
+#define PIXEL_PIN 28
+#define NUM_PIXELS 1
+Adafruit_NeoPixel pixel(NUM_PIXELS, PIXEL_PIN, NEO_GRB + NEO_KHZ800);
 
-// BLE UUIDS - must match the peripheral
-
+// ======================================================
+// BLE UUIDS
+// ======================================================
 const char *ALERT_SERVICE_UUID = "19B10000-E8F2-537E-4F6C-D104768A1214";
 const char *ALERT_EVENT_UUID   = "19B10001-E8F2-537E-4F6C-D104768A1214";
 const char *STATUS_UUID        = "19B10002-E8F2-537E-4F6C-D104768A1214";
 
-
-// SPEAKER / I2S SETUP
-
+// ======================================================
+// AUDIO
+// ======================================================
 #define BCLK 26
 #define I2SDATA 21
 #define STREAMBUFF (16 * 1024)
@@ -43,61 +51,75 @@ BackgroundAudioVoice v[] = {
   voice_en_us_nyc
 };
 
-
+// ======================================================
 // BLE STATE
-
+// ======================================================
 BLEAdvertising connectedDevice;
 BLERemoteService *alertService = nullptr;
 BLERemoteCharacteristic *alertEvent = nullptr;
 BLERemoteCharacteristic *statusChar = nullptr;
 
 bool isConnected = false;
-uint32_t lastStatusRead = 0;
 uint32_t lastSpeechTime = 0;
-
-// optional debounce so repeated messages do not pile up speech
+uint32_t lastConnectAttempt = 0;
 const uint32_t SPEECH_COOLDOWN = 1200;
+const uint32_t RECONNECT_INTERVAL = 1000;
 
+// ======================================================
+// NEOPIXEL COLORS BY ORIENTATION
+// ======================================================
+uint32_t colorForOrientation(const String &orientation) {
+  if (orientation == "UP") return pixel.Color(0, 255, 0);       // Green
+  if (orientation == "DOWN") return pixel.Color(255, 0, 0);     // Red
+  if (orientation == "LEFT") return pixel.Color(0, 0, 255);     // Blue
+  if (orientation == "RIGHT") return pixel.Color(255, 255, 0);  // Yellow
+  if (orientation == "FRONT") return pixel.Color(0, 255, 255);  // Cyan
+  if (orientation == "BACK") return pixel.Color(255, 0, 255);   // Magenta
+  return pixel.Color(255, 255, 255);                            // White
+}
 
-// HELPERS
+void alertFlash(const String &orientation) {
+  uint32_t color = colorForOrientation(orientation);
 
-void blinkLED(int times, int onTime, int offTime) {
-  for (int i = 0; i < times; i++) {
-    digitalWrite(LED_BUILTIN, HIGH);
-    delay(onTime);
-    digitalWrite(LED_BUILTIN, LOW);
-    delay(offTime);
+  for (int i = 0; i < 3; i++) {
+    pixel.setPixelColor(0, color);
+    pixel.show();
+    delay(150);
+
+    pixel.clear();
+    pixel.show();
+    delay(120);
   }
 }
 
+// ======================================================
+// HELPERS
+// ======================================================
 String orientationToSpeech(String orientation) {
-  if (orientation == "FACE_UP") return "face up";
-  if (orientation == "FACE_DOWN") return "face down";
+  if (orientation == "UP") return "up";
+  if (orientation == "DOWN") return "down";
   if (orientation == "LEFT") return "left";
   if (orientation == "RIGHT") return "right";
   if (orientation == "FRONT") return "front";
   if (orientation == "BACK") return "back";
-  return " Security Alert!";
+  return "unknown orientation";
 }
 
-void speakShakeAlert(const String &orientation, const String &timestamp) {
-  if (millis() - lastSpeechTime < SPEECH_COOLDOWN) {
-    return;
-  }
+void speakShakeAlert(const String &orientation, const String &rtcTime) {
+  if (millis() - lastSpeechTime < SPEECH_COOLDOWN) return;
   lastSpeechTime = millis();
 
-  String phrase = "Shake detected.  " + orientationToSpeech(orientation);
+  String phrase = "Shake detected. Orientation " + orientationToSpeech(orientation);
   BMP.speak(phrase.c_str());
 
-  Serial.print("Spoken alert at timestamp ms: ");
-  Serial.println(timestamp);
+  Serial.print("RTC timestamp received: ");
+  Serial.println(rtcTime);
 }
 
 void parseAndHandleMessage(const String &msg) {
   Serial.print("Received: ");
   Serial.println(msg);
 
-  // Expected format: SHAKE,ORIENTATION,TIMESTAMP
   int firstComma = msg.indexOf(',');
   int secondComma = msg.indexOf(',', firstComma + 1);
 
@@ -108,44 +130,32 @@ void parseAndHandleMessage(const String &msg) {
 
   String eventType   = msg.substring(0, firstComma);
   String orientation = msg.substring(firstComma + 1, secondComma);
-  String timestamp   = msg.substring(secondComma + 1);
+  String rtcTime     = msg.substring(secondComma + 1);
 
   if (eventType == "SHAKE") {
     Serial.println("SHAKE received on Central");
     Serial.print("Orientation: ");
     Serial.println(orientation);
-    Serial.print("Timestamp(ms): ");
-    Serial.println(timestamp);
+    Serial.print("RTC time: ");
+    Serial.println(rtcTime);
 
-    blinkLED(2, 120, 120);
-
-    // This is where NeoPixel code can go later
-    // triggerNeoPixelAlert(orientation);
-
-    speakShakeAlert(orientation, timestamp);
+    alertFlash(orientation);
+    speakShakeAlert(orientation, rtcTime);
   }
 }
-
-
-// NOTIFY CALLBACK
 
 void onAlertNotify(BLERemoteCharacteristic *c, const uint8_t *data, uint32_t len) {
   String msg = "";
   for (uint32_t i = 0; i < len; i++) {
     msg += (char)data[i];
   }
-
   parseAndHandleMessage(msg);
 }
-
-
-// CONNECT TO PERIPHERAL
 
 bool connectToPeripheral() {
   Serial.println("Scanning for peripheral...");
 
-  auto report = BLE.scan(BLEUUID(ALERT_SERVICE_UUID), 5);
-
+  auto report = BLE.scan(BLEUUID(ALERT_SERVICE_UUID), 2);
   if (!report || report->empty()) {
     Serial.println("No peripheral found");
     return false;
@@ -153,18 +163,15 @@ bool connectToPeripheral() {
 
   connectedDevice = report->front();
 
-  Serial.println("Peripheral found, connecting...");
-
+  Serial.println("Connecting...");
   if (!BLE.client()->connect(connectedDevice, 10)) {
-    Serial.println("Connection failed");
+    Serial.println("Connect failed");
     return false;
   }
 
-  Serial.println("Connected to peripheral");
-
   alertService = BLE.client()->service(BLEUUID(ALERT_SERVICE_UUID));
   if (!alertService) {
-    Serial.println("Alert service not found");
+    Serial.println("Service not found");
     BLE.client()->disconnect();
     return false;
   }
@@ -183,55 +190,57 @@ bool connectToPeripheral() {
 
   Serial.println("Notifications enabled");
   isConnected = true;
+
+  // short visual confirmation only, no speaker on connect
+  pixel.setPixelColor(0, pixel.Color(0, 20, 0));
+  pixel.show();
+  delay(120);
+  pixel.clear();
+  pixel.show();
+
   return true;
 }
-
-
-// SETUP
 
 void setup() {
   Serial.begin(115200);
   delay(3000);
 
-  pinMode(LED_BUILTIN, OUTPUT);
-  digitalWrite(LED_BUILTIN, LOW);
-
-  BMP.setVoice(v[1]);
-
-  if (!BMP.begin()) {
-    Serial.println("Failed to start BMP");
-  } else {
-    BMP.speak("Central board ready");
-  }
+  pixel.begin();
+  pixel.clear();
+  pixel.setBrightness(80);
+  pixel.show();
 
   BLE.begin();
-  Serial.println("BLE Central ready");
+  Serial.println("BLE ready");
+
+  BMP.setVoice(v[1]);
+  if (!BMP.begin()) {
+    Serial.println("BMP begin failed");
+  } else {
+    delay(150);
+    Serial.println("Audio ready");
+  }
+
+  Serial.println("Central ready");
 }
-
-
-// LOOP
 
 void loop() {
   if (!isConnected || !BLE.client()->connected()) {
     isConnected = false;
 
-    if (BLE.client()->connected()) {
-      BLE.client()->disconnect();
+    if (millis() - lastConnectAttempt >= RECONNECT_INTERVAL) {
+      lastConnectAttempt = millis();
+
+      if (BLE.client()->connected()) {
+        BLE.client()->disconnect();
+      }
+
+      connectToPeripheral();
     }
 
-    if (!connectToPeripheral()) {
-      delay(2000);
-      return;
-    }
+    delay(50);
+    return;
   }
 
-  // optional status read every few seconds
-  if (statusChar && millis() - lastStatusRead > 5000) {
-    lastStatusRead = millis();
-    String status = statusChar->getString();
-    Serial.print("Peripheral status: ");
-    Serial.println(status);
-  }
-
-  delay(100);
+  delay(50);
 }
