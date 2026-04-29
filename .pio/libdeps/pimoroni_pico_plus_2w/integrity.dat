@@ -1,0 +1,4 @@
+adafruit/Adafruit NeoPixel@^1.15.4
+adafruit/Adafruit LSM6DS@^4.7.4
+adafruit/RTClib@^2.1.4
+arduino-libraries/NTPClient@^3.2.1
