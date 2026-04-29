@@ -41,10 +41,9 @@ uint32_t lastShakeTime = 0;
 const float SHAKE_THRESHOLD = 18.0;
 const uint32_t SHAKE_COOLDOWN = 1200;
 
-// orientation tuning
-const float MAIN_AXIS_MIN = 6.5;       // slightly easier to classify
-const float AXIS_MARGIN   = 2.0;       // dominant axis must beat others by this much
-const uint32_t SETTLE_DELAY_MS = 180;  // wait after shake before classifying
+const float MAIN_AXIS_MIN = 6.5;
+const float AXIS_MARGIN   = 2.0;
+const uint32_t SETTLE_DELAY_MS = 220;
 const int ORIENTATION_SAMPLES = 5;
 
 // ======================================================
@@ -85,7 +84,6 @@ bool readAccel(float &ax, float &ay, float &az, float &mag) {
   ax = a.acceleration.x;
   ay = a.acceleration.y;
   az = a.acceleration.z;
-
   mag = sqrt(ax * ax + ay * ay + az * az);
   return true;
 }
@@ -103,10 +101,9 @@ bool shakeDetected(float &mag) {
 
 // ======================================================
 // ORIENTATION
-// Uses the coordinate meaning from your reference code:
-// az < 0 = up, az > 0 = down
-// ax > 0 = right, ax < 0 = left
-// ay > 0 = front, ay < 0 = back
+// az < 0 = UP, az > 0 = DOWN
+// ax > 0 = RIGHT, ax < 0 = LEFT
+// ay > 0 = FRONT, ay < 0 = BACK
 // ======================================================
 String detectOrientationStable() {
   delay(SETTLE_DELAY_MS);
@@ -116,11 +113,9 @@ String detectOrientationStable() {
   for (int i = 0; i < ORIENTATION_SAMPLES; i++) {
     float ax, ay, az, mag;
     readAccel(ax, ay, az, mag);
-
     sumX += ax;
     sumY += ay;
     sumZ += az;
-
     delay(30);
   }
 
@@ -139,7 +134,6 @@ String detectOrientationStable() {
   Serial.print("  Z: ");
   Serial.println(az);
 
-  // dominant axis + margin check to avoid mixed orientations
   if (absZ >= MAIN_AXIS_MIN && absZ > absX + AXIS_MARGIN && absZ > absY + AXIS_MARGIN) {
     return (az < 0) ? "UP" : "DOWN";
   }
@@ -152,7 +146,6 @@ String detectOrientationStable() {
     return (ay > 0) ? "FRONT" : "BACK";
   }
 
-  // fallback: whichever axis is strongest
   if (absZ >= absX && absZ >= absY && absZ >= MAIN_AXIS_MIN) {
     return (az < 0) ? "UP" : "DOWN";
   }
@@ -179,14 +172,16 @@ void setupRTC() {
 
   Serial.println("RTC ready");
 
-  // Uncomment once if your RTC needs to be set, then comment out again:
-   rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+  // Uncomment once to set RTC, then comment again and re-upload
+  // rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
 }
 
 String getTime() {
   DateTime now = rtc.now();
-  char buf[32];
-  sprintf(buf, "%02d:%02d:%02d", now.hour(), now.minute(), now.second());
+  char buf[40];
+  sprintf(buf, "%04d-%02d-%02d %02d:%02d:%02d",
+          now.year(), now.month(), now.day(),
+          now.hour(), now.minute(), now.second());
   return String(buf);
 }
 
@@ -211,7 +206,7 @@ void setup() {
   alertService.addCharacteristic(&statusChar);
   BLE.server()->addService(&alertService);
 
-  alertEvent.setValue("READY,UNKNOWN,00:00:00");
+  alertEvent.setValue("READY,UNKNOWN,0000-00-00 00:00:00");
   statusChar.setValue("READY");
 
   BLE.startAdvertising();
